@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from ecommerce import serializers, paginators, perms
 from ecommerce.models import Category, Product, ProductComment, ProductRating, Store, StoreComment, StoreRating, User, Tag, Order, OrderDetail
-
+from django.db.models import Q
 
 class CategoryViewSet(viewsets.ViewSet, generics.ListAPIView):
     queryset = Category.objects.filter(active=True)
@@ -14,17 +14,16 @@ class CategoryViewSet(viewsets.ViewSet, generics.ListAPIView):
         products = self.get_object().products_cate.filter(active=True)
         return Response(serializers.ProductSerializer(products, many=True).data)
 
-class ProductViewSet(viewsets.ViewSet, generics.ListAPIView, generics.RetrieveAPIView):
+class ProductViewSet(viewsets.ViewSet, generics.RetrieveUpdateDestroyAPIView):
     queryset = Product.objects.filter(active=True)
     serializer_class = serializers.ProductDetailsSerializer
     pagination_class = paginators.ProductPaginator
-
     def get_queryset(self):
         queryset = self.queryset
         if self.action.__eq__('list'):
             q = self.request.query_params.get('q')
             if q:
-                queryset = queryset.filter(name__icontains=q) | queryset.filter(store_name__icontains=q)
+                queryset = queryset.filter(Q(name__icontains=q) | Q(store__name__icontains=q))
 
             cate_id = self.request.query_params.get('category_id')
             if cate_id:
@@ -35,10 +34,15 @@ class ProductViewSet(viewsets.ViewSet, generics.ListAPIView, generics.RetrieveAP
                 queryset = queryset.filter(store_id=store_id)
 
         return queryset
-
     def get_permissions(self):
-        if self.action in ['add_productcomment'] or self.action in ['add_productrating']:
-            return [permissions.IsAuthenticated()]
+        if self.action in ['add_productcomment', 'add_productrating']:
+            return [perms.IsBuyerUser()]
+
+        if self.action in ['add_tags']:
+            return [perms.ProductOwner()]
+
+        if self.request.method in ['PUT', 'PATCH', 'DELETE']:
+            return [perms.ProductOwner()]
 
         return [permissions.AllowAny()]
     @action(methods=['post'], url_path='add-comment', detail=True)
@@ -94,14 +98,22 @@ class ProductViewSet(viewsets.ViewSet, generics.ListAPIView, generics.RetrieveAP
         return Response(serializers.ProductRatingSerializer(c).data, status=status.HTTP_201_CREATED)
 
 
-class StoreViewSet(viewsets.ViewSet, generics.ListAPIView):
+class StoreViewSet(viewsets.ViewSet, generics.ListAPIView, generics.CreateAPIView):
     queryset = Store.objects.filter(active=True)
     serializer_class = serializers.StoreSerializer
+    parser_classes = [parsers.MultiPartParser, parsers.FormParser]
     def get_permissions(self):
-        if self.action in ['add_storecomment'] or self.action in ['add_storerating']:
-            return [permissions.IsAuthenticated()]
-
+        if self.action in ['add_storecomment', 'add_storerating']:
+            return [perms.IsBuyerUser()]
+        if self.action in ['add_product', 'get_orders']:
+            return [perms.StoreOwner()]
+        if self.request.method == 'POST':
+            return [perms.IsSellerUser()]
         return [permissions.AllowAny()]
+
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
     @action(methods=['get'], url_path='products', detail=True)
     def get_products(self, request, pk):
         products = self.get_object().products_store.filter(active=True)
@@ -113,6 +125,21 @@ class StoreViewSet(viewsets.ViewSet, generics.ListAPIView):
             products = products.filter(category_id=cate_id)
 
         return Response(serializers.ProductSerializer(products, many=True).data, status=status.HTTP_200_OK)
+    @action(methods=['post'], url_path='add-product', detail=True)
+    def add_product(self, request, pk=None):
+        try:
+            store = self.get_object()
+        except Store.DoesNotExist:
+            return Response({"detail":"Store does not exist or you don't have permission to access this store"}, status=status.HTTP_400_BAD_REQUEST)
+
+        product_data = request.data
+        product_data['store'] = store.id
+        serializer = serializers.ProductDetailsSerializer(data=product_data)
+        if serializer.is_valid():
+            product = serializer.save()
+            return Response(serializers.ProductDetailsSerializer(product).data, status=status.HTTP_201_CREATED)
+        else:
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(methods=['post'], url_path='add-comment', detail=True)
     def add_storecomment(self, request, pk):
@@ -147,6 +174,18 @@ class StoreViewSet(viewsets.ViewSet, generics.ListAPIView):
     def add_storerating(self, request, pk):
         c = self.get_object().storerating_set.create(rating=request.data.get('rating'), buyer=request.user)
         return Response(serializers.StoreRatingSerializer(c).data, status=status.HTTP_201_CREATED)
+    @action(methods=['get'], url_path='orders', detail=True)
+    def get_orders(self, request, pk):
+        orders = self.get_object().order_store.select_related('buyer').order_by('-id')
+        paginator = paginators.ProductPaginator()
+
+        page = paginator.paginate_queryset(orders, request)
+        if page is not None:
+            serializer = serializers.OrderSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        return Response(serializers.OrderSerializer(orders, many=True).data)
+
 class StoreCommentViewSet(viewsets.ViewSet, generics.DestroyAPIView, generics.UpdateAPIView):
     queryset = StoreComment.objects.all()
     serializer_class = serializers.StoreCommentSerializer
@@ -175,6 +214,8 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
     def get_permissions(self):
         if self.action in ['get_current_user']:
             return [permissions.IsAuthenticated()]
+        if self.action in ['get_orders']:
+            return [perms.IsBuyerUser()]
 
         return [permissions.AllowAny()]
 
@@ -187,12 +228,20 @@ class UserViewSet(viewsets.ViewSet, generics.CreateAPIView):
                 setattr(user, k, v)
             user.save()
         return Response(serializers.UserSerializer(user).data)
-    # @action(methods=['get'], url_path='orders', detail=True)
-    # def get_orders(self, request, pk):
-    #     orders = Order.objects.filter(buyer=request.user)
-    #     return Response(serializers.OrderSerializer(orders).data)
+
+    @action(methods=['get'], url_path='orders', detail=True)
+    def get_orders(self, request, pk):
+        orders = self.get_object().order_buyer.select_related('store').order_by('-id')
+        paginator = paginators.OrderPaginator()
+
+        page = paginator.paginate_queryset(orders, request)
+        if page is not None:
+            serializer = serializers.OrderSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+
+        return Response(serializers.OrderSerializer(orders, many=True).data)
 
 
-class OrderViewSet(viewsets.ViewSet, generics.ListAPIView, generics.UpdateAPIView, generics.DestroyAPIView):
-    queryset = Order.objects.filter(active=True)
-    serializer_class = serializers.OrderSerializer
+# class OrderViewSet(viewsets.ViewSet, generics.ListAPIView, generics.UpdateAPIView, generics.DestroyAPIView):
+#     queryset = Order.objects.filter(active=True)
+#     serializer_class = serializers.OrderSerializer

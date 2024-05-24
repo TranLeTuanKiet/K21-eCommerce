@@ -99,7 +99,8 @@ import cloudinary
 cloudinary.config(
     cloud_name="diqoacvgx",
     api_key="973366195185575",
-    api_secret="Gpy6aprEflWcqZNa7mEk8V-Ufe8"
+    api_secret="Gpy6aprEflWcqZNa7mEk8V-Ufe8",
+    # api_proxy = "https://proxy.server:3128"
 )
 
 # Password validation

@@ -31,6 +31,7 @@ GENDER_CHOICES = (
     ('female', 'Female'),
     ('other', 'Other')
 )
+
 class User(AbstractUser):
     avatar = CloudinaryField(null=True)
     # reset_password_token = models.CharField(max_length=100, blank=True, null=True)
@@ -85,13 +86,13 @@ class Store(BaseModel):
 
 class Product(BaseModel):
     name = models.CharField(max_length=100)
-    description = RichTextField()
+    description = RichTextField(blank=True, null=True)
     inventory_quantity = models.PositiveIntegerField(default=0)
     price = models.DecimalField(max_digits=10, decimal_places=3)
     image = CloudinaryField(null=True)
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='products_cate')
     store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name='products_store')
-    tags = models.ManyToManyField('Tag')
+    tags = models.ManyToManyField('Tag', blank=True)
     def __str__(self):
         return self.name
 
@@ -106,8 +107,8 @@ class Product(BaseModel):
 
 
 class Order(BaseModel):
-    buyer = models.ForeignKey(User, on_delete=models.CASCADE, null=True)
-    store = models.ForeignKey(Store, on_delete=models.CASCADE, null=True)
+    buyer = models.ForeignKey(User, on_delete=models.CASCADE, null=True, related_name='order_buyer')
+    store = models.ForeignKey(Store, on_delete=models.CASCADE, null=True, related_name='order_store')
     status = models.CharField(max_length=100, choices=STATUS_ORDER_CHOICES, default=STATUS_ORDER_CHOICES[0][0])
     def __str__(self):
         return f"Order #{self.id} from {self.store.name}"
@@ -116,8 +117,8 @@ class Order(BaseModel):
         return sum(item.total_price() for item in self.orderdetail_set.all())
 
 class OrderDetail(BaseModel):
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
-    order = models.ForeignKey(Order, on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='order_product')
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='details')
     quantity = models.PositiveIntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=3, null=True, blank=True) #don gia * so luong
 

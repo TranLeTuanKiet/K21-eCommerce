@@ -6,18 +6,25 @@ from ecommerce.models import (User, Category,
 
 
 class UserSerializer(serializers.ModelSerializer):
+    avatar = serializers.ImageField(required=False, allow_null=True)
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'password', 'first_name', 'last_name', 'avatar', 'gender', 'birth', 'address', 'email', 'role']
         extra_kwargs = {
             'password': {
                 'write_only': True
-            }
+            },
+            'avatar': {'required': False}
         }
-    def get_avatar(self, obj):
-        if obj.user.avatar:
-            return obj.user.avatar.url
-        return None
+    # def get_avatar(self, obj):
+    #     if obj.user.avatar:
+    #         return obj.user.avatar.url
+    #     return None
+    def to_representation(self, instance):
+        rep = super().to_representation(instance)
+        rep['avatar'] = instance.avatar.url
+
+        return rep
 
     def create(self, validated_data):
         data = validated_data.copy()
@@ -80,6 +87,7 @@ class StoreSerializer(ItemSerializer):
     class Meta:
         model = Store
         fields = '__all__'
+        read_only_fields = ['owner']
 
 
 class ProductSerializer(ItemSerializer):
@@ -88,25 +96,29 @@ class ProductSerializer(ItemSerializer):
         fields = ['id', 'name', 'price', 'image', 'category', 'store']
 
 class ProductDetailsSerializer(ProductSerializer):
-    store = StoreSerializer()
-    tags = TagSerializer(many=True)
-
+    # store = StoreSerializer()
+    # tags = TagSerializer(many=True)
+    tags = serializers.PrimaryKeyRelatedField(queryset=Tag.objects.all(), many=True)
     class Meta:
         model = ProductSerializer.Meta.model
-        fields = ProductSerializer.Meta.fields + ['description', 'tags']
+        fields = ProductSerializer.Meta.fields + ['description', 'tags', 'inventory_quantity']
+        extra_kwargs = {
+            'description': {'required': False, 'allow_null': True},
+            'tags': {'required': False, 'allow_null': True}
+        }
+class OrderDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderDetail
+        fields = '__all__'
 
 class OrderSerializer(serializers.ModelSerializer):
-    buyer = UserSerializer()
-    store = StoreSerializer()
+    items = OrderDetailSerializer(many=True, read_only=True)
     class Meta:
         model = Order
         fields = '__all__'
 
 
-class OrderDetailSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = OrderDetail
-        fields = '__all__'
+
 
 class CommentSerializer(serializers.ModelSerializer):
     buyer = UserSerializer()
