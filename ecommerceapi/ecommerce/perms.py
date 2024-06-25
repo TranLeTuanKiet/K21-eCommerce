@@ -23,3 +23,11 @@ class StoreOwner(permissions.IsAuthenticated):
 class ProductOwner(permissions.IsAuthenticated):
     def has_object_permission(self, request, view, product):
         return super().has_permission(request, view) and request.user == product.store.owner
+
+class CartOwner(permissions.IsAuthenticated):
+    def has_object_permission(self, request, view, cart):
+        return super().has_permission(request, view) and request.user == cart.buyer
+
+class CartItemOwner(permissions.IsAuthenticated):
+    def has_object_permission(self, request, view, cartitem):
+        return super().has_permission(request, view) and request.user == cartitem.cart.buyer

@@ -2,11 +2,12 @@ import cloudinary.uploader
 from rest_framework import serializers
 from ecommerce.models import (User, Category,
                               Product, Store, Order, OrderDetail, Tag, StoreComment, StoreRating, ProductComment,
-                              ProductRating, )
+                              ProductRating, Cart, CartItem)
 
 
 class UserSerializer(serializers.ModelSerializer):
     avatar = serializers.ImageField(required=False, allow_null=True)
+
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'password', 'first_name', 'last_name', 'avatar', 'gender', 'birth', 'address', 'email', 'role']
@@ -22,8 +23,10 @@ class UserSerializer(serializers.ModelSerializer):
     #     return None
     def to_representation(self, instance):
         rep = super().to_representation(instance)
-        rep['avatar'] = instance.avatar.url
-
+        if instance.avatar:
+            rep['avatar'] = instance.avatar.url
+        else:
+            rep['avatar'] = None
         return rep
 
     def create(self, validated_data):
@@ -78,12 +81,15 @@ class TagSerializer(serializers.ModelSerializer):
 class ItemSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         rep = super().to_representation(instance)
-        rep['image'] = instance.image.url
-
+        if instance.image:
+            rep['image'] = instance.image.url
+        else:
+            rep['image'] = None
         return rep
 
 
 class StoreSerializer(ItemSerializer):
+    # owner = UserSerializer(required=False)
     class Meta:
         model = Store
         fields = '__all__'
@@ -96,9 +102,9 @@ class ProductSerializer(ItemSerializer):
         fields = ['id', 'name', 'price', 'image', 'category', 'store']
 
 class ProductDetailsSerializer(ProductSerializer):
-    # store = StoreSerializer()
-    # tags = TagSerializer(many=True)
-    tags = serializers.PrimaryKeyRelatedField(queryset=Tag.objects.all(), many=True)
+    store = StoreSerializer(required=False)
+    tags = TagSerializer(many=True, required=False)
+    # tags = serializers.PrimaryKeyRelatedField(queryset=Tag.objects.all(), many=True)
     class Meta:
         model = ProductSerializer.Meta.model
         fields = ProductSerializer.Meta.fields + ['description', 'tags', 'inventory_quantity']
@@ -106,6 +112,7 @@ class ProductDetailsSerializer(ProductSerializer):
             'description': {'required': False, 'allow_null': True},
             'tags': {'required': False, 'allow_null': True}
         }
+
 class OrderDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderDetail
@@ -116,8 +123,7 @@ class OrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = '__all__'
-
-
+        read_only_fields = ['total_price']
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -137,6 +143,7 @@ class ProductCommentSerializer(CommentSerializer):
     class Meta:
         model = ProductComment
         fields = ['id', 'content', 'created_date', 'updated_date', 'buyer', 'product', 'parent']
+        # read_only_fields = ['buyer', 'parent']
 
 
 
@@ -187,3 +194,19 @@ class ProductRatingSerializer(RatingSerializer):
     class Meta:
         model = ProductRating
         fields = ['id', 'rating', 'created_date', 'updated_date', 'buyer', 'product']
+
+
+class CartItemSerializer(serializers.ModelSerializer):
+    product = ProductSerializer()
+
+    class Meta:
+        model = CartItem
+        fields = '__all__'
+
+class CartSerializer(serializers.ModelSerializer):
+    items = CartItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Cart
+        fields = '__all__'
+

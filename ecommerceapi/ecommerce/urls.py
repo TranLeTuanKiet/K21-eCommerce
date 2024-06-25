@@ -7,13 +7,14 @@ r.register('categories', views.CategoryViewSet, basename='categories')
 r.register('products', views.ProductViewSet, basename='products')
 r.register('stores', views.StoreViewSet, basename='stores')
 r.register('users', views.UserViewSet, basename='users')
-r.register('store_comments', views.StoreCommentViewSet, basename='store_comments')
-r.register('store_ratings', views.StoreRatingViewSet, basename='store_ratings')
-r.register('product_comments', views.ProductCommentViewSet, basename='product_comments')
-r.register('product_ratings', views.ProductRatingViewSet, basename='product_ratings')
-# r.register('orders', views.OrderViewSet, basename='orders')
-
+r.register('storecomments', views.StoreCommentViewSet, basename='storecomments')
+r.register('storeratings', views.StoreRatingViewSet, basename='store_ratings')
+r.register('productcomments', views.ProductCommentViewSet, basename='productcomments')
+r.register('productratings', views.ProductRatingViewSet, basename='productratings')
+r.register('carts', views.CartViewSet, basename='carts')
+r.register('orders', views.OrderViewSet, basename='orders')
+r.register('cartitems', views.CartItemViewSet, basename='cartitems')
 
 urlpatterns = [
-    path('', include(r.urls))
+    path('', include(r.urls)),
 ]

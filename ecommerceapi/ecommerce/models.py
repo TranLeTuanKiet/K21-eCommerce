@@ -5,6 +5,8 @@ from cloudinary.models import CloudinaryField
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.core.exceptions import ValidationError
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 class BaseModel(models.Model):
     created_date = models.DateTimeField(auto_now_add=True, null=True)
     updated_date = models.DateTimeField(auto_now=True, null=True)
@@ -33,38 +35,11 @@ GENDER_CHOICES = (
 )
 
 class User(AbstractUser):
-    avatar = CloudinaryField(null=True)
-    # reset_password_token = models.CharField(max_length=100, blank=True, null=True)
-    # user = models.OneToOneField(User, on_delete=models.CASCADE, null=True)
-    # groups = models.ManyToManyField(Group, related_name='custom_users')
+    avatar = CloudinaryField(null=True, folder="avatars/")
     birth = models.DateField(default=timezone.now)
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, default='male')
     address = models.CharField(max_length=100, null=True)
     role = models.CharField(max_length=50, choices=ROLE_CHOICES, default='BUYER')
-
-
-# class CustomUser(BaseModel):
-#     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True)
-#     # groups = models.ManyToManyField(Group, related_name='custom_users')
-#     birth = models.DateField(default=timezone.now)
-#     gender = models.CharField(max_length=10, choices=[('male', 'Male'), ('female', 'Female'), ('other', 'Other')])
-#     address = models.CharField(max_length=100)
-#     role = models.CharField(max_length=50, choices=ROLE_CHOICES, default='BUYER')
-#     class Meta:
-#         abstract = True
-
-
-# class Administrator(CustomUser):
-#     groups = models.ManyToManyField(Group, related_name='admin_groups')
-# class Staff(CustomUser):
-#     job = models.CharField(max_length=50)
-#     groups = models.ManyToManyField(Group, related_name='staff_groups')
-# class Seller(CustomUser):
-#     tax_id = models.CharField(max_length=20)
-#     groups = models.ManyToManyField(Group, related_name='seller_groups')
-# class Buyer(CustomUser):
-#     groups = models.ManyToManyField(Group, related_name='buyer_groups')
-
 
 class Category(BaseModel):
     name = models.CharField(max_length=100)
@@ -79,7 +54,7 @@ class Store(BaseModel):
     address = models.CharField(max_length=200)
     phone_number = models.CharField(max_length=10)
     owner = models.OneToOneField(User, on_delete=models.CASCADE)
-    image = CloudinaryField(null=True)
+    image = CloudinaryField(null=True, folder="store_avatars/")
     def __str__(self):
         return self.name
 
@@ -89,32 +64,29 @@ class Product(BaseModel):
     description = RichTextField(blank=True, null=True)
     inventory_quantity = models.PositiveIntegerField(default=0)
     price = models.DecimalField(max_digits=10, decimal_places=3)
-    image = CloudinaryField(null=True)
+    image = CloudinaryField(null=True, folder="product_img/")
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='products_cate')
-    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name='products_store')
+    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name='products_store', null=True)
     tags = models.ManyToManyField('Tag', blank=True)
     def __str__(self):
         return self.name
-
-# class ProductImage(BaseModel):
-#     image = CloudinaryField(null=True)
-#     product = models.ForeignKey(Product, related_name='product_images')
-#     is_primary = models.BooleanField(default=False)
-#
-#     def save(self, *args, **kwargs):
-#         if self.is_primary:
-#             ProductImage.objects.filter(product=self.product).exclude(pk=self.pk).update(is_primary=False)
-
 
 class Order(BaseModel):
     buyer = models.ForeignKey(User, on_delete=models.CASCADE, null=True, related_name='order_buyer')
     store = models.ForeignKey(Store, on_delete=models.CASCADE, null=True, related_name='order_store')
     status = models.CharField(max_length=100, choices=STATUS_ORDER_CHOICES, default=STATUS_ORDER_CHOICES[0][0])
+    total_price = models.DecimalField(max_digits=10, decimal_places=3, default=0)
     def __str__(self):
-        return f"Order #{self.id} from {self.store.name}"
+        return f"Order #{self.id} from {self.store.name}: total {self.total_price}"
 
-    def total_price(self):
-        return sum(item.total_price() for item in self.orderdetail_set.all())
+    def calculate_total_price(self):
+        return sum(item.total_price() for item in self.details.all())
+
+    def save(self, *args, **kwargs):
+        if self.total_price is None:
+            self.total_price = self.calculate_total_price()
+        super().save(*args, **kwargs)
+
 
 class OrderDetail(BaseModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='order_product')
@@ -133,6 +105,13 @@ class OrderDetail(BaseModel):
     class Meta:
         unique_together = ('order', 'product')
 
+# Signals to update order total price when OrderDetail is modified
+@receiver(post_save, sender=OrderDetail)
+@receiver(post_delete, sender=OrderDetail)
+def update_order_total_price(sender, instance, **kwargs):
+    order = instance.order
+    order.total_price = order.calculate_total_price()
+    order.save()
 
 class Tag(BaseModel):
     name = models.CharField(max_length=80, unique=True)
@@ -190,8 +169,21 @@ class ProductRating(ProductInteraction):
     class Meta:
         unique_together = ('buyer', 'product')
 
-# admin_group, admin_created = Group.objects.get_or_create(name='Administrator')
-# staff_group, staff_created = Group.objects.get_or_create(name='Staff')
-# seller_group, seller_created = Group.objects.get_or_create(name='Seller')
-# buyer_group, buyer_created = Group.objects.get_or_create(name='Buyer')
+class Cart(models.Model):
+    buyer = models.OneToOneField(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+
+    def __str__(self):
+        return f"Cart of {self.buyer.username}"
+
+class CartItem(models.Model):
+    cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name='items')
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=1)
+    selected = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.product.name} - {self.quantity}"
+
+
 

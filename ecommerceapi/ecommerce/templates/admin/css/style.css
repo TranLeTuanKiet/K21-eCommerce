@@ -1,6 +1,11 @@
-.cookieCard {
-  width: 300px;
-  height: 200px;
+.headerStats {
+    display: flex;
+    width: 100%;
+    flex-flow: wrap;
+}
+.card {
+  width: 23%;
+  height: 180px;
   background: linear-gradient(to right,rgb(137, 104, 255),rgb(175, 152, 255));
   display: flex;
   flex-direction: column;
@@ -10,9 +15,10 @@
   padding: 20px;
   position: relative;
   overflow: hidden;
+  margin-right: 20px;
 }
 
-.cookieCard::before {
+.card::before {
   width: 150px;
   height: 150px;
   content: "";
@@ -24,35 +30,42 @@
   top: -25%;
 }
 
-.cookieHeading {
-  font-size: 1.5em;
+.cardHeading {
+  font-size: 2.7em;
   font-weight: 600;
   color: rgb(241, 241, 241);
   z-index: 2;
+  margin-bottom: 0px;
 }
 
-.cookieDescription {
-  font-size: 0.9em;
+.cardDescription {
+  font-size: 1.2em;
   color: rgb(241, 241, 241);
   z-index: 2;
 }
 
-.cookieDescription a {
-  color: rgb(241, 241, 241);
+.time {
+    width: 100%;
+}
+.charts {
+    width: 100%;
+}
+.chart {
+    width: 50%;
+    height: 500px;
+    margin-bottom: 10px;
+    margin-top: 20px;
+}
+.dateFormItem {
+    margin: 10px;
 }
 
-.acceptButton {
-  padding: 11px 20px;
-  background-color: #7b57ff;
-  transition-duration: .2s;
-  border: none;
-  color: rgb(241, 241, 241);
-  cursor: pointer;
-  font-weight: 600;
-  z-index: 2;
+.stats {
+    width: 100%;
+    text-align: -webkit-center;
 }
 
-.acceptButton:hover {
-  background-color: #714aff;
-  transition-duration: .2s;
-}
+
+
+
+
